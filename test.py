@@ -1,5 +1,5 @@
 import pytest
-from todo import TodoList
+from app import TodoList
 
 def test_add_task():
     todo_list = TodoList()

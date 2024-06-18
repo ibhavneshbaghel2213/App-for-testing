@@ -9,7 +9,8 @@ pipeline {
         }
         stage('Install Despendency and test') {
             steps {
-                sh 'pip install -r requirements.txt && pytest test.py'
+                sh 'pip install -r requirements.txt'
+                sh '~/.local/bin/pytest test.py'
             }
          }
      }
