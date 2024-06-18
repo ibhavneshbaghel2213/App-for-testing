@@ -1,0 +1,65 @@
+pipeline {
+    agent any
+
+    environment {
+        BRANCH_NAME = env.BRANCH_NAME ?: 'unknown'
+    }
+
+    stages {
+        stage('Check Branch Name') {
+            steps {
+                script {
+                    if (!BRANCH_NAME.startsWith('feature-')) {
+                        error("Branch name must start with 'feature-'")
+                    }
+                }
+            }
+        }
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        stage('Install Dependencies') {
+            steps {
+                sh 'python -m venv venv'
+                sh 'source venv/bin/activate && pip install -r requirements.txt'
+            }
+            steps {
+                sh 'source venv/bin/activate && pip install pytest'
+                sh 'source venv/bin/activate && pytest test.py'
+            }
+        }
+        stage('Approval Check') {
+            steps {
+                script {
+                    def pr = githubPullRequest(id: env.CHANGE_ID)
+                    def reviews = pr.reviews()
+
+                    def approvals = reviews.findAll { review ->
+                        review.state == 'APPROVED'
+                    }
+
+                    if (approvals.size() < 2) {
+                        error("Not enough approvals. Requires at least 2 approvals.")
+                    }
+
+                    def systemApproval = reviews.find { review ->
+                        review.user.login == 'jenkins-user' && review.state == 'APPROVED'
+                    }
+
+                    if (!systemApproval) {
+                        error("System (Jenkins) approval is missing.")
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
+
