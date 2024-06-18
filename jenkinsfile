@@ -7,10 +7,9 @@ pipeline {
                 checkout scm
             }
         }
-        stage('Install Dependencies') {
+        stage('Install Despendency and test') {
             steps {
-                sh 'pip install -r requirements.txt'
-                sh 'pytest test.py'
+                sh 'pip install -r requirements.txt && pytest test.py'
             }
          }
      }
