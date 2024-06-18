@@ -4,9 +4,11 @@ from todo import TodoList
 def test_add_task():
     todo_list = TodoList()
     task = "Buy milk"
+    print(task)
     result = todo_list.add_task(task)
     assert result == task
     assert task in todo_list.view_tasks()
+    
 
 def test_view_tasks():
     todo_list = TodoList()
