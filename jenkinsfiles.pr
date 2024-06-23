@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     environment {
-        BRANCH_NAME = env.BRANCH_NAME ?: 'unknown'
+        BRANCH_NAME = "${env.BRANCH_NAME ?: 'unknown'}"
     }
-
+    
     stages {
         stage('Check Branch Name') {
             steps {
