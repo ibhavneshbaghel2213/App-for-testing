@@ -1,0 +1,54 @@
+pipeline {
+    agent any
+
+    environment {
+        GITHUB_TOKEN = credentials('GITCREDS')
+        REPO_OWNER = 'ibhavneshbaghel2213'
+        REPO_NAME = 'App-for-testing'
+        BRANCH_NAME = "${env.BRANCH_NAME ?: 'unknown'}"
+    }
+
+    stages {
+        stage('Check Branch Name') {
+            steps {
+                script {
+                    if (!BRANCH_NAME.startsWith('feature-')) {
+                        error("Branch name must start with 'feature-'")
+                    }
+                }
+            }
+        }
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+         }
+        stage('PR Approval Check') {
+            steps {
+                script {
+                    def prId = env.CHANGE_ID
+                    def response = httpRequest(
+                        acceptType: 'APPLICATION_JSON',
+                        contentType: 'APPLICATION_JSON',
+                        customHeaders: [[name: 'Authorization', value: "token ${env.GITHUB_TOKEN}"]],
+                        url: "https://api.github.com/repos/${env.REPO_OWNER}/${env.REPO_NAME}/pulls/${prId}/reviews"
+                    )
+                    def reviews = readJSON text: response.content
+                    def approvals = reviews.findAll { review ->
+                        review.state == 'APPROVED'
+                    }
+                    if (approvals.size() < 1) {
+                        error("Not enough approvals. Requires at least 2 approvals.")
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
+
