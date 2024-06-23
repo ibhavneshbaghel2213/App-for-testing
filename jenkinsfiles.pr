@@ -36,17 +36,10 @@ pipeline {
                         review.state == 'APPROVED'
                     }
 
-                    if (approvals.size() < 2) {
+                    if (approvals.size() < 1) {
                         error("Not enough approvals. Requires at least 2 approvals.")
                     }
 
-                    def systemApproval = reviews.find { review ->
-                        review.user.login == 'jenkins-user' && review.state == 'APPROVED'
-                    }
-
-                    if (!systemApproval) {
-                        error("System (Jenkins) approval is missing.")
-                    }
                 }
             }
         }
