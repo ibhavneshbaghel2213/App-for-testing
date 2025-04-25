@@ -1,0 +1,316 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  ALBSecurityGroup:
+    Properties:
+      GroupName: my-project-alb-sg
+      GroupDescription: Security group for ALB
+      SecurityGroupEgress:
+      - CidrIp: 0.0.0.0/0
+        FromPort: 0
+        IpProtocol: "-1"
+        ToPort: 0
+      SecurityGroupIngress:
+      - CidrIp: 106.219.146.242/32
+        FromPort: 80
+        IpProtocol: tcp
+        ToPort: 80
+      - CidrIp: 106.219.146.242/32
+        FromPort: 443
+        IpProtocol: tcp
+        ToPort: 443
+      Tags:
+      - Key: Name
+        Value: my-project-alb-sg
+      - Key: Environment
+        Value: dev
+      - Key: Project
+        Value: my-project
+      VpcId:
+        Ref: MainVPC
+    Type: AWS::EC2::SecurityGroup
+  ApplicationLoadBalancer:
+    Properties:
+      Name: my-project-alb
+      Scheme: internet-facing
+      SecurityGroups:
+      - Ref: ALBSecurityGroup
+      Subnets:
+      - Ref: PublicSubnet
+      - Ref: PrivateSubnet
+      Tags:
+      - Key: Name
+        Value: my-project-alb
+      - Key: Environment
+        Value: dev
+      - Key: Project
+        Value: my-project
+      Type: application
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+  EC2SecurityGroup:
+    Properties:
+      GroupDescription: Security group for ec2
+      GroupName: my-project-ec2-sg
+      SecurityGroupEgress:
+      - CidrIp: 0.0.0.0/0
+        FromPort: 0
+        IpProtocol: "-1"
+        ToPort: 0
+      SecurityGroupIngress:
+      - FromPort: 80
+        IpProtocol: tcp
+        SourceSecurityGroupId:
+          Ref: ALBSecurityGroup
+        ToPort: 80
+      - CidrIp: 106.219.146.242/32
+        FromPort: 8080
+        IpProtocol: tcp
+        ToPort: 8080
+      - CidrIp: 106.219.146.242/32
+        FromPort: 22
+        IpProtocol: tcp
+        ToPort: 22
+      - CidrIp: 106.219.146.242/32
+        FromPort: 443
+        IpProtocol: tcp
+        ToPort: 443
+      Tags:
+      - Key: Name
+        Value: my-project-ec2-sg
+      - Key: Environment
+        Value: dev
+      - Key: Project
+        Value: my-project
+      VpcId:
+        Ref: MainVPC
+    Type: AWS::EC2::SecurityGroup
+  ElasticIP:
+    Properties:
+      Domain: vpc
+      Tags:
+      - Key: Name
+        Value: my-project-nat-eip
+      - Key: Environment
+        Value: dev
+      - Key: Project
+        Value: my-project
+    Type: AWS::EC2::EIP
+  InternetGateway:
+    Properties:
+      Tags:
+      - Key: Name
+        Value: my-project-igw
+      - Key: Environment
+        Value: dev
+      - Key: Project
+        Value: my-project
+    Type: AWS::EC2::InternetGateway
+  LoadBalancerListener:
+    Properties:
+      DefaultActions:
+      - TargetGroupArn:
+          Ref: TargetGroup
+        Type: forward
+      LoadBalancerArn:
+        Ref: ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+    Type: AWS::ElasticLoadBalancingV2::Listener
+  MainVPC:
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+      - Key: Name
+        Value: my-project-vpc
+      - Key: Environment
+        Value: dev
+      - Key: Project
+        Value: my-project
+    Type: AWS::EC2::VPC
+  NATGateway:
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - ElasticIP
+        - AllocationId
+      SubnetId:
+        Ref: PublicSubnet
+      Tags:
+      - Key: Name
+        Value: my-project-nat-gateway
+      - Key: Environment
+        Value: dev
+      - Key: Project
+        Value: my-project
+    Type: AWS::EC2::NatGateway
+  NginxInstance:
+    Properties:
+      ImageId: ami-0f9de6e2d2f067fca
+      InstanceType: t2.micro
+      KeyName: HU-Edge
+      SecurityGroupIds:
+      - Ref: EC2SecurityGroup
+      SubnetId:
+        Ref: PrivateSubnet
+      Tags:
+      - Key: Name
+        Value: my-project-nginx-instance
+      - Key: Environment
+        Value: dev
+      - Key: Project
+        Value: my-project
+      UserData:
+        Fn::Base64:
+          Fn::Join:
+          - ""
+          - - "#!/bin/bash
+              "
+            - "sudo apt update -y
+              "
+            - "sudo apt install nginx -y
+              "
+            - "systemctl start nginx
+              "
+            - "systemctl enable nginx
+              "
+    Type: AWS::EC2::Instance
+  PrivateRoute:
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NATGateway
+      RouteTableId:
+        Ref: PrivateRouteTable
+    Type: AWS::EC2::Route
+  PrivateRouteTable:
+    Properties:
+      Tags:
+      - Key: Name
+        Value: my-project-private-rt
+      - Key: Environment
+        Value: dev
+      - Key: Project
+        Value: my-project
+      VpcId:
+        Ref: MainVPC
+    Type: AWS::EC2::RouteTable
+  PrivateRouteTableAssociation:
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTable
+      SubnetId:
+        Ref: PrivateSubnet
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  PrivateSubnet:
+    Properties:
+      AvailabilityZone: us-east-1b
+      CidrBlock: 10.0.2.0/24
+      Tags:
+      - Key: Name
+        Value: my-project-private-subnet
+      - Key: Environment
+        Value: dev
+      - Key: Project
+        Value: my-project
+      VpcId:
+        Ref: MainVPC
+    Type: AWS::EC2::Subnet
+  PublicRoute:
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: InternetGateway
+      RouteTableId:
+        Ref: PublicRouteTable
+    Type: AWS::EC2::Route
+  PublicRouteTable:
+    Properties:
+      Tags:
+      - Key: Name
+        Value: my-project-public-rt
+      - Key: Environment
+        Value: dev
+      - Key: Project
+        Value: my-project
+      VpcId:
+        Ref: MainVPC
+    Type: AWS::EC2::RouteTable
+  PublicRouteTableAssociation:
+    Properties:
+      RouteTableId:
+        Ref: PublicRouteTable
+      SubnetId:
+        Ref: PublicSubnet
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  PublicSubnet:
+    Properties:
+      AvailabilityZone: us-east-1a
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: my-project-public-subnet
+      - Key: Environment
+        Value: dev
+      - Key: Project
+        Value: my-project
+      VpcId:
+        Ref: MainVPC
+    Type: AWS::EC2::Subnet
+  TargetGroup:
+    Properties:
+      Name: my-project-tg
+      Port: 80
+      Protocol: HTTP
+      Tags:
+      - Key: Name
+        Value: my-project-tg
+      - Key: Environment
+        Value: dev
+      - Key: Project
+        Value: my-project
+      VpcId:
+        Ref: MainVPC
+      TargetType: instance
+      Targets:
+      - id: !Ref NginxInstance
+        port: 80
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /
+      Matcher:
+        HttpCode: 200
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+  # TargetGroupAttachment:
+  #   Properties:
+  #     Port: 80
+  #     TargetGroupArn:
+  #       Ref: TargetGroup
+  #     TargetId:
+  #       Ref: NginxInstance
+  #   Type: AWS::ElasticLoadBalancingV2::TargetGroupAttachment
+  # TargetGroupAttachment:
+  #   Type: AWS::ElasticLoadBalancingV2::TargetGroupAttachment
+  #   DeletionPolicy: Retain
+  #   Properties:
+  #     TargetGroupArn: !Ref TargetGroup
+  #     TargetId: !Ref NginxInstance
+  #     Port: 80
+  VPCGatewayAttachment:
+    Properties:
+      InternetGatewayId:
+        Ref: InternetGateway
+      VpcId:
+        Ref: MainVPC
+    Type: AWS::EC2::VPCGatewayAttachment
+
+
+
+
+
+
+
+
+# issue: 
+# ALBSecurityGroup:Resource handler returned message: "The request must contain the parameter GroupDescription (Service: Ec2, Status Code: 400, Request ID: 0c128263-0be7-4dcd-8a4a-e5419d27394f) (SDK Attempt Count: 1)" (RequestToken: d0d76c7f-5daf-d997-df73-40153329737f, HandlerErrorCode: InvalidRequest)
+# 
